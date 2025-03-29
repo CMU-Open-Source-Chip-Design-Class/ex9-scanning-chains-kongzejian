@@ -6,8 +6,8 @@ from cocotb.triggers import Timer
 # Make sure to set FILE_NAME
 # to the filepath of the .log
 # file you are working with
-CHAIN_LENGTH = -1
-FILE_NAME    = ""
+CHAIN_LENGTH = 3
+FILE_NAME    = "fault/fault5.sv"
 
 
 
@@ -121,12 +121,11 @@ def print_chain(chain):
     
 # Hint: Use the Timer() builtin function
 async def step_clock(dut):
+        dut.clk.value = 1
+        await Timer(10, units = 'ns')
+        dut.clk.value = 0
+        await Timer(10, units = 'ns')
 
-    ######################
-    # TODO: YOUR CODE HERE 
-    ######################
-
-    pass
     
 
 #-------------------------------------------------------------------
@@ -137,12 +136,15 @@ async def step_clock(dut):
 #       the specified FF?
         
 async def input_chain_single(dut, bit, ff_index):
+        dut.scan_en.value = 1
+        dut.scan_in.value = bit
+        for i in range(ff_index + 1):
+            if i != 0:
+                dut.scan_in.value = 0
+            await step_clock(dut)
+        dut.scan_en.value = 0
 
-    ######################
-    # TODO: YOUR CODE HERE 
-    ######################
-
-    pass
+           
     
 #-------------------------------------------------------------------
 
@@ -154,12 +156,16 @@ async def input_chain_single(dut, bit, ff_index):
 #       the specified FF?
         
 async def input_chain(dut, bit_list, ff_index):
-
-    ######################
-    # TODO: YOUR CODE HERE 
-    ######################
-
-    pass
+        length_bit_list = len(bit_list)
+        dut.scan_en.value = 1
+        for i in range(ff_index + length_bit_list):
+            if i < length_bit_list:
+                  dut.scan_in.value = bit_list[length_bit_list - i - 1]
+            else:
+                  dut.scan_in.value = 0
+            await step_clock(dut)
+        dut.scan_en.value = 0
+        
 
 #-----------------------------------------------
 
@@ -167,12 +173,12 @@ async def input_chain(dut, bit_list, ff_index):
 # chain at specified index 
         
 async def output_chain_single(dut, ff_index):
-
-    ######################
-    # TODO: YOUR CODE HERE 
-    ######################
-
-    pass       
+        dut.scan_en.value = 1
+        for i in range(CHAIN_LENGTH - ff_index -1):
+            await step_clock(dut)       
+        output = dut.scan_out.value
+        dut.scan_en.value = 0
+        return output 
 
 #-----------------------------------------------
 
@@ -182,12 +188,15 @@ async def output_chain_single(dut, ff_index):
 #   for Part H of Task 1
         
 async def output_chain(dut, ff_index, output_length):
+        output_list = []
+        dut.scan_en.value = 1
+        for i in range(CHAIN_LENGTH - ff_index):
+             if i >= CHAIN_LENGTH -ff_index - output_length:
+                  output_list.insert(0, dut.scan_out.value)
+             await step_clock(dut)
+        dut.scan_en.value = 0
+        return output_list
 
-    ######################
-    # TODO: YOUR CODE HERE 
-    ######################
-
-    pass       
 
 #-----------------------------------------------
 
@@ -201,9 +210,66 @@ async def test(dut):
                             # at the top of the file
 
     # Setup the scan chain object
-    chain = setup_chain(FILE_NAME)
+    # chain = setup_chain(FILE_NAME)
+    # print_chain(chain)
 
     ######################
     # TODO: YOUR CODE HERE 
     ######################
+    # Test adder
+    # await input_chain(dut,[1,0,0,0,1,0,0,0],5)
+    # await step_clock(dut)
+    # output_list = (await output_chain(dut, 0, 13))
+    # print(output_list)
+
+    # await input_chain(dut,[1,1,0,0,1,1,0,0],5)
+    # await step_clock(dut)
+    # output_list = (await output_chain(dut, 0, 13))
+    # print(output_list)
+
+    # await input_chain(dut,[1,1,1,1,1,0,0,0],5)
+    # await step_clock(dut)
+    # output_list = (await output_chain(dut, 0, 13))
+    # print(output_list)
+
+
+
+    #FSM testting
+    # for state in range(8):
+    #     for i in range(2):
+    #         bits = [int(b) for b in f"{state:03b}"]
+    #         await input_chain(dut, bits, 0)
+    #         dut.data_avail.value = i
+    #         await step_clock(dut)
+    #         print("state: "+ str(state))
+    #         print("data_avail:" + str(i))
+    #         print("buf_en: " + str(dut.buf_en.value))
+    #         print("out_writing: " + str(dut.out_writing.value))
+    #         print("out_sel: " + str(dut.out_sel.value))
+    #         output_list = (await output_chain(dut,0,3))
+    #         print("next state:", output_list)
+    #         print("\n")
+
+    #Fault Model
+    test_vectors = [[0, 0, 0, 0],[1, 1, 0, 0],[0, 0, 1, 0],[1, 0, 1, 1], [1, 1, 1, 1]]
+    for i in range(len(test_vectors)):
+        test = test_vectors[i]
+        dut.a.value  = test[0]
+        dut.b.value  = test[1]
+        dut.c.value  = test[2]
+        dut.d.value  = test[3]
+        await Timer(1, units='ns')
+        output = dut.x.value
+        if output != 1 and i == 0:
+            print("faults may be f/0,c/1,e/0,a/1,x/0,g/0,h/0\n")
+        elif i == 1 and output != 1:
+            print("faults may be f/0,c/1,e/1,a/0,x/0,g/0,h/0\n")
+        elif i == 2 and output != 0:
+            print("faults may be h/1,x/1,f/1,d/1,c/0\n")
+        elif i ==3 and output != 0:
+            print("faults may be b/1,g/1,x/1,e/1,a/0\n")
+        elif i ==4 and output != 1:
+            print("faults may be d/0,e/1,a/0,b/0,x/0,g/0,h/0")
+
+   
 
